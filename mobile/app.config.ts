@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
-  name: "Green Heights",
+  name: "Neighbourly",
   owner: "begulas-hell",
   slug: "society-resident",
   scheme: "societyresident",
