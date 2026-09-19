@@ -7,8 +7,15 @@ const config: ExpoConfig = {
   version: "1.0.0",
   orientation: "portrait",
   userInterfaceStyle: "light",
+  icon: "./assets/icon.png",
   ios: { bundleIdentifier: "com.society.resident", supportsTablet: true },
-  android: { package: "com.society.resident" },
+  android: {
+    package: "com.society.resident",
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#205E4D",
+    },
+  },
   plugins: [
     "expo-router",
     "expo-dev-client",
