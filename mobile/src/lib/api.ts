@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import { useSession } from "./session";
 import {
   QueryClient,
@@ -8,8 +9,11 @@ import {
 } from "@tanstack/react-query";
 import type { Page } from "../types/api";
 
-export const API_URL =
-  process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+export const API_URL = (
+  process.env.EXPO_PUBLIC_API_URL ||
+  Constants.expoConfig?.extra?.apiUrl ||
+  "https://society-mgt-app.onrender.com"
+).replace(/\/$/, "");
 export class ApiError extends Error {
   constructor(
     message: string,

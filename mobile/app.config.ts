@@ -1,6 +1,7 @@
 import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "Green Heights",
+  owner: "begulas-hell",
   slug: "society-resident",
   scheme: "societyresident",
   version: "1.0.0",
@@ -34,9 +35,14 @@ const config: ExpoConfig = {
     ],
   ],
   extra: {
-    ...(process.env.EXPO_PUBLIC_EAS_PROJECT_ID
-      ? { eas: { projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID } }
-      : {}),
+    eas: {
+      projectId:
+        process.env.EXPO_PUBLIC_EAS_PROJECT_ID ||
+        "d9c2419c-8b4d-4c8f-8cee-3ce0c904e1fc",
+    },
+    apiUrl:
+      process.env.EXPO_PUBLIC_API_URL ||
+      "https://society-mgt-app.onrender.com",
   },
 };
 export default config;
