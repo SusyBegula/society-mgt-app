@@ -1,5 +1,7 @@
 # Neighbourly · Society resident app
 
+
+
 React Native / Expo development app for Android and iOS, backed by a FastAPI modular monolith and PostgreSQL. Includes property switching, maintenance bills, payments and PDF receipts, visitors and invitation passes, complaints and timelines, notices, amenity bookings, vehicles, family access, domestic-help history, documents, directory, emergencies, notifications, profile and settings.
 
 ## Requirements
