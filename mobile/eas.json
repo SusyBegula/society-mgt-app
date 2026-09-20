@@ -5,20 +5,20 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://society-mgt-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://api.susybegula.co.in"
       }
     },
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://society-mgt-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://api.susybegula.co.in"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EAS_BUILD_PROFILE": "production",
-        "EXPO_PUBLIC_API_URL": "https://society-mgt-app.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://api.susybegula.co.in"
       }
     }
   }

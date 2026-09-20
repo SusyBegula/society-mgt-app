@@ -12,7 +12,7 @@ import type { Page } from "../types/api";
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
   Constants.expoConfig?.extra?.apiUrl ||
-  "https://society-mgt-app.onrender.com"
+  "https://api.susybegula.co.in"
 ).replace(/\/$/, "");
 export class ApiError extends Error {
   constructor(

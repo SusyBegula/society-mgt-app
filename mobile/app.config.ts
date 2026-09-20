@@ -49,7 +49,7 @@ const config: ExpoConfig = {
     },
     apiUrl:
       process.env.EXPO_PUBLIC_API_URL ||
-      "https://society-mgt-app.onrender.com",
+      "https://api.susybegula.co.in",
   },
 };
 export default config;
