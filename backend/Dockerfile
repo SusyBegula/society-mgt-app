@@ -6,3 +6,4 @@ COPY . .
 RUN useradd --create-home app && mkdir -p /data/uploads && chown -R app:app /app /data
 USER app
 EXPOSE 8000
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
