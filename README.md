@@ -21,6 +21,8 @@ cd mobile
 npm ci
 ```
 
+
+
 Backend: `http://127.0.0.1:8000`; development API docs: `/docs`; readiness: `/health`. PostgreSQL is exposed locally on `55433`. Compose applies Alembic migrations before starting the API. Seed data is development-only and idempotent; it creates Green Heights / Tower A / Flat 1204 and Sunrise Residency / Tower C / Flat 305.
 
 **Demo login:** mobile `9876543210`, OTP `123456` (India +91). Use the property selector to choose either home. Directory contacts other than public emergency numbers are demonstration numbers.
