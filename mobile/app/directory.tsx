@@ -11,9 +11,11 @@ import {
   Empty,
 } from "../src/components/ui";
 import { useApi, useAction } from "../src/lib/api";
+import { useSession } from "../src/lib/session";
 import type { Contact } from "../src/types/api";
 export default function Directory() {
-  const query = useApi<Contact[]>("/directory");
+  const property = useSession(s => s.property);
+  const query = useApi<Contact[]>(property?.context_type === "staff" ? "/guard/directory" : "/directory");
   const call = useAction(async (number: string) => {
     await Linking.openURL(`tel:${number}`);
   });

@@ -21,7 +21,7 @@ import { date, time } from "../../src/lib/format";
 import type { Visitor, Invitation } from "../../src/types/api";
 export default function Visitors() {
   const [tab, setTab] = useState("Visitors");
-  const visitors = usePages<Visitor>("/visitors");
+  const visitors = usePages<Visitor>("/visitors", 5000);
   const invites = usePages<Invitation>("/visitors/invitations/list");
   const query = tab === "Visitors" ? visitors : invites;
   const [decision, setDecision] = useState<{

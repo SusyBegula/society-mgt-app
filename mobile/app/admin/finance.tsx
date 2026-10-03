@@ -71,7 +71,7 @@ export default function AdminFinanceScreen() {
       });
       Alert.alert(
         "Reminder Sent",
-        `Payment reminder delivered to ${unit.tower} - ${unit.flat} residents via push notification.`
+        `Payment reminder delivered to ${unit.tower} - ${unit.flat} residents. Push delivery is queued for registered devices.`
       );
     } catch (err: any) {
       Alert.alert("Error", err?.message || "Could not send reminder.");
@@ -167,7 +167,7 @@ export default function AdminFinanceScreen() {
       setPaymentUnit(null);
       Alert.alert(
         "Payment Recorded",
-        `Receipt of ₹${amt.toLocaleString("en-IN")} recorded for ${paymentUnit.tower} - ${paymentUnit.flat}. Resident notified.`
+        `Receipt of ₹${amt.toLocaleString("en-IN")} recorded for ${paymentUnit.tower} - ${paymentUnit.flat}. Notification queued. Cheques reduce dues only after clearance.`
       );
     } catch (err: any) {
       const msg =

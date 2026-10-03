@@ -33,6 +33,7 @@ export default function Payments() {
         subtitle="A clear picture of your dues."
         back={false}
       />
+      <Button title="Refund requests" secondary onPress={()=>router.push("/refunds" as never)} />
       <Chips
         options={["Bills", "Payment history"]}
         value={tab}

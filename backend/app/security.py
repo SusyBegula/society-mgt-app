@@ -14,7 +14,9 @@ from app.config import settings
 from app.db import get_db
 from app.models import User, ResidentMembership, StaffRole, RefreshToken, RateLimit, now
 
-Db = Annotated[Session, Depends(get_db)]
+# Commit before sending a successful response so immediate refetches see the write,
+# and commit-time constraint failures become HTTP errors rather than false success.
+Db = Annotated[Session, Depends(get_db, scope="function")]
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -67,6 +69,17 @@ def membership(db: Db, user: CurrentUser, x_property_id: Annotated[str, Header()
 Property = Annotated[ResidentMembership, Depends(membership)]
 
 
+def society_context(db: Db, user: CurrentUser, x_property_id: Annotated[str, Header()]):
+    for model in (ResidentMembership, StaffRole):
+        row = db.scalar(select(model).where(model.id == x_property_id, model.user_id == user.id, model.active.is_(True)))
+        if row:
+            return row
+    raise HTTPException(403, "You do not have access to this society.")
+
+
+SocietyContext = Annotated[ResidentMembership | StaffRole, Depends(society_context)]
+
+
 def staff_context(db: Db, user: CurrentUser, x_property_id: Annotated[str, Header()]) -> StaffRole:
     staff = db.scalar(select(StaffRole).where(StaffRole.id == x_property_id,
                       StaffRole.user_id == user.id, StaffRole.active.is_(True)))
@@ -94,6 +107,22 @@ def require_admin(staff: Staff) -> StaffRole:
 AdminRole = Annotated[StaffRole, Depends(require_admin)]
 
 
+def require_management(staff: Staff) -> StaffRole:
+    if staff.role not in ("Admin", "Secretary"):
+        raise HTTPException(403, "Society management permission is required.")
+    return staff
+
+
+def require_finance(staff: Staff) -> StaffRole:
+    if staff.role not in ("Admin", "Treasurer"):
+        raise HTTPException(403, "Finance permission is required.")
+    return staff
+
+
+ManagementRole = Annotated[StaffRole, Depends(require_management)]
+FinanceRole = Annotated[StaffRole, Depends(require_finance)]
+
+
 def require_guard(staff: Staff) -> StaffRole:
     if staff.role not in ("Guard", "Admin", "Secretary"):
         raise HTTPException(403, "Only security personnel or administrators can perform this action.")
@@ -106,6 +135,8 @@ GuardRole = Annotated[StaffRole, Depends(require_guard)]
 
 def scoped(model, member):
     query = select(model).where(model.society_id == member.society_id)
+    if hasattr(model, "context_id"):
+        query = query.where((model.context_id == member.id) | model.context_id.is_(None))
     if hasattr(model, "unit_id"):
         query = query.where(model.unit_id == member.unit_id)
     return query

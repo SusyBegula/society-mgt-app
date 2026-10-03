@@ -121,11 +121,11 @@ export default function WalkInScreen() {
           </View>
 
           <Txt weight="extra" style={{ fontSize: 20, color: "#1B5E20", textAlign: "center" }}>
-            Entry Approved & Recorded
+            Resident approval requested
           </Txt>
 
           <Txt muted style={{ textAlign: "center", maxWidth: 280, fontSize: 13 }}>
-            {name} ({kind}) is now marked inside visiting {successUnit}. Push notification sent to the resident.
+            {name} ({kind}) is waiting for approval from {successUnit}. Check the gate dashboard before allowing entry.
           </Txt>
 
           <View style={{ width: "100%", gap: 10, marginTop: 12 }}>
@@ -144,7 +144,7 @@ export default function WalkInScreen() {
   return (
     <Screen>
       <Header
-        title="Log Walk-in Entry"
+        title="Request visitor entry"
         subtitle="Register unannounced guests, cabs, services"
       />
 

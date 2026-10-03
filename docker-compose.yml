@@ -24,6 +24,20 @@ services:
     volumes:
       - uploads:/data/uploads
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  push-worker:
+    build: ./backend
+    profiles: ["workers"]
+    env_file: ./backend/.env
+    depends_on: [api]
+    restart: unless-stopped
+    command: python -m app.push_worker
+  maintenance-worker:
+    build: ./backend
+    profiles: ["workers"]
+    env_file: ./backend/.env
+    depends_on: [api]
+    restart: unless-stopped
+    command: python -m app.maintenance_worker
 volumes:
   postgres_data:
   uploads:

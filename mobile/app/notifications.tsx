@@ -16,6 +16,7 @@ import { usePages, useAction, send } from "../src/lib/api";
 import { date, time } from "../src/lib/format";
 import { colors as c } from "../src/theme";
 import type { Notification } from "../src/types/api";
+import { notificationRoute } from "../src/lib/notification-navigation";
 const icons: Record<string, IconName> = {
   Visitors: "people-outline",
   Payments: "wallet-outline",
@@ -29,11 +30,7 @@ export default function Notifications() {
   const readAll = useAction(() => send("/notifications/read-all", "POST"));
   const open = useAction(async (notification: Notification) => {
     await send(`/notifications/${notification.id}/read`, "POST");
-    if (
-      /^\/(visitors|payments|complaints|notices|bookings|emergency|receipt)(\/|$)/.test(
-        notification.route,
-      )
-    )
+    if (notificationRoute(notification.route))
       router.push(notification.route as never);
   });
   return (

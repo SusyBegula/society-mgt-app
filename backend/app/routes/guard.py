@@ -1,4 +1,5 @@
 import secrets
+import json
 from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select, or_
@@ -6,13 +7,14 @@ from app.models import (
     Visitor, VisitorInvitation, Parcel, Unit, Building, User,
     ResidentMembership, now
 )
-from app.security import Db, GuardRole
+from app.security import Db, GuardRole, limit
+from app.audit import audit
 from app.schemas import (
     VerifyPassInput, CheckInInput, WalkInVisitorInput,
     ParcelInput, ParcelCollectInput
 )
 from app.serialization import public
-from app.notifications import notify
+from app.notifications import notify, notify_household
 
 router = APIRouter(prefix="/guard", tags=["Security & Gate Guard"])
 
@@ -30,6 +32,7 @@ def list_units(db: Db, guard: GuardRole):
 
 @router.post("/verify-pass")
 def verify_pass(data: VerifyPassInput, db: Db, guard: GuardRole):
+    limit(db, "gate-pass:" + guard.user_id, 20, 300)
     if not data.token and not data.pin:
         raise HTTPException(400, "Provide either a QR token or a 6-digit PIN.")
 
@@ -37,6 +40,16 @@ def verify_pass(data: VerifyPassInput, db: Db, guard: GuardRole):
     if data.token:
         # Strip potential JSON wrapper if raw QR payload was passed
         token = data.token.strip()
+        if token.startswith("{"):
+            try:
+                payload = json.loads(token)
+                if payload.get("v") != 1 or payload.get("type") != "society-invitation":
+                    raise ValueError()
+                token = payload["token"]
+                if not isinstance(token, str) or not token:
+                    raise ValueError()
+            except (ValueError, KeyError, AttributeError):
+                raise HTTPException(400, "Invalid QR pass.")
         query = query.where(VisitorInvitation.qr_token == token)
     elif data.pin:
         query = query.where(VisitorInvitation.pin == data.pin.strip())
@@ -46,10 +59,9 @@ def verify_pass(data: VerifyPassInput, db: Db, guard: GuardRole):
         raise HTTPException(404, "Invalid gate pass. No matching invitation found.")
 
     current_time = now()
-    # Allow entry 1 hour before start time up to 1 hour after expiration
-    if current_time < (invitation.start_at - timedelta(hours=1)):
+    if current_time < invitation.start_at:
         raise HTTPException(400, f"This pass is scheduled for later: valid from {invitation.start_at.strftime('%d %b %I:%M %p')}.")
-    if current_time > (invitation.end_at + timedelta(hours=1)):
+    if current_time > invitation.end_at:
         raise HTTPException(400, "This gate pass has expired.")
     if invitation.status != "Active":
         raise HTTPException(400, f"This pass cannot be used. Current status: {invitation.status}.")
@@ -84,6 +96,11 @@ def check_in_visitor(data: CheckInInput, db: Db, guard: GuardRole):
         raise HTTPException(404, "Invitation not found.")
     if invitation.status != "Active":
         raise HTTPException(400, f"Invitation cannot be checked in. Status: {invitation.status}")
+    if not invitation.start_at <= now() <= invitation.end_at:
+        raise HTTPException(409, "This pass is not valid at this time.")
+    if not db.scalar(select(ResidentMembership.id).where(ResidentMembership.unit_id == invitation.unit_id,
+            ResidentMembership.user_id == invitation.user_id, ResidentMembership.active.is_(True))):
+        raise HTTPException(409, "The host no longer has access to this flat.")
 
     invitation.status = "Checked In"
 
@@ -101,6 +118,7 @@ def check_in_visitor(data: CheckInInput, db: Db, guard: GuardRole):
 
     db.add(visitor)
     db.flush()
+    audit(db, guard, "visitor.check_in", visitor.id)
 
     # Notify flat residents
     memberships = db.scalars(
@@ -127,9 +145,12 @@ def check_out_visitor(visitor_id: str, db: Db, guard: GuardRole):
         raise HTTPException(404, "Visitor not found.")
     if visitor.status == "Exited":
         return public(visitor)
+    if visitor.status != "Inside":
+        raise HTTPException(409, "Only a visitor inside can be checked out.")
 
     visitor.status = "Exited"
     visitor.exit_at = now()
+    audit(db, guard, "visitor.check_out", visitor.id)
     return public(visitor)
 
 
@@ -146,9 +167,9 @@ def walk_in_visitor(data: WalkInVisitorInput, db: Db, guard: GuardRole):
         phone=data.phone,
         kind=data.kind,
         purpose=data.purpose,
-        status="Inside",
+        status="Waiting",
         arrived_at=now(),
-        entry_at=now()
+        entry_at=None
     )
     db.add(visitor)
     db.flush()
@@ -159,9 +180,48 @@ def walk_in_visitor(data: WalkInVisitorInput, db: Db, guard: GuardRole):
             ResidentMembership.active.is_(True)
         )
     ).all()
-    for m in memberships:
-        notify(db, m, f"{data.kind} Arrival", f"{data.name} entered the gate for your flat.", "Visitors", "/visitors")
+    notify_household(db, guard.society_id, data.unit_id, "Visitor awaiting approval",
+        f"{data.name} ({data.kind}) is waiting at the gate. Approve or deny entry.",
+        "Visitors", "/visitors", visitors_only=True)
+    audit(db, guard, "visitor.request", visitor.id)
 
+    return public(visitor)
+
+
+@router.get("/visitors/queue")
+def visitor_queue(db: Db, guard: GuardRole):
+    records = db.execute(select(Visitor, Unit, Building).join(Unit, Unit.id == Visitor.unit_id)
+        .join(Building, Building.id == Unit.building_id).where(Visitor.society_id == guard.society_id,
+        Visitor.status.in_(["Waiting", "Allowed", "Denied"]), Visitor.arrived_at > now() - timedelta(hours=12))
+        .order_by(Visitor.arrived_at.desc()).limit(200)).all()
+    return [{**public(v), "tower": b.name, "flat": u.number} for v, u, b in records]
+
+
+@router.get("/visitors/{visitor_id}/contacts")
+def host_contacts(visitor_id: str, db: Db, guard: GuardRole):
+    visitor = db.get(Visitor, visitor_id)
+    if not visitor or visitor.society_id != guard.society_id or visitor.status != "Waiting":
+        raise HTTPException(404, "Waiting visitor not found.")
+    records = db.execute(select(User).join(ResidentMembership, ResidentMembership.user_id == User.id)
+        .where(ResidentMembership.unit_id == visitor.unit_id, ResidentMembership.active.is_(True),
+               ResidentMembership.receives_visitors.is_(True))).scalars().all()
+    audit(db, guard, "visitor.host_contacts_viewed", visitor.id)
+    return [{"name": u.name, "phone": u.phone} for u in records]
+
+
+@router.post("/visitors/{visitor_id}/admit")
+def admit_visitor(visitor_id: str, db: Db, guard: GuardRole):
+    visitor = db.scalar(select(Visitor).where(Visitor.id == visitor_id,
+        Visitor.society_id == guard.society_id).with_for_update())
+    if not visitor:
+        raise HTTPException(404, "Visitor not found.")
+    if visitor.status == "Inside":
+        return public(visitor)
+    if visitor.status != "Allowed" or not visitor.decided_at or visitor.decided_at < now() - timedelta(minutes=30):
+        raise HTTPException(409, "Entry requires resident approval within the last 30 minutes.")
+    visitor.status, visitor.entry_at = "Inside", now()
+    audit(db, guard, "visitor.admitted", visitor.id)
+    notify_household(db, guard.society_id, visitor.unit_id, "Visitor entered", visitor.name + " entered the gate.", "Visitors", "/visitors", visitors_only=True)
     return public(visitor)
 
 
@@ -225,14 +285,16 @@ def log_parcel(data: ParcelInput, db: Db, guard: GuardRole):
             f"Delivery Package from {data.courier}",
             f"Package arrived at the gate for {flat_label}. Pickup OTP: {otp}",
             "Parcels",
-            "/home"
+            "/parcels"
         )
 
-    return public(parcel)
+    audit(db, guard, "parcel.arrived", parcel.id)
+    return public(parcel, exclude=("otp",))
 
 
 @router.post("/parcels/{parcel_id}/collect")
 def collect_parcel(parcel_id: str, data: ParcelCollectInput, db: Db, guard: GuardRole):
+    limit(db, "parcel-pickup:" + guard.user_id, 15, 300)
     parcel = db.scalar(
         select(Parcel).where(
             Parcel.id == parcel_id,
@@ -248,7 +310,8 @@ def collect_parcel(parcel_id: str, data: ParcelCollectInput, db: Db, guard: Guar
 
     parcel.status = "Collected"
     parcel.collected_at = now()
-    return public(parcel)
+    audit(db, guard, "parcel.collected", parcel.id)
+    return public(parcel, exclude=("otp",))
 
 
 @router.get("/parcels/active")

@@ -4,7 +4,7 @@ from app.models import Complaint, ComplaintComment, Upload
 from app.security import Db, Property, scoped, owned
 from app.schemas import ComplaintInput, CommentInput, ResolutionInput
 from app.serialization import public, page
-from app.notifications import notify, send_push
+from app.notifications import notify, notify_staff
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
@@ -24,8 +24,7 @@ def create(data: ComplaintInput, db: Db, member: Property, tasks: BackgroundTask
     db.add(ComplaintComment(complaint_id=row.id, user_id=member.user_id, text="Complaint opened", kind="status"))
     route = f"/complaints/{row.id}"
     notify(db, member, "Complaint submitted", row.title, "Complaints", route)
-    db.commit()
-    tasks.add_task(send_push, member.user_id, "Complaint submitted", row.title, "Complaints", route)
+    notify_staff(db, member.society_id, "New complaint", row.title, "Complaints", "/admin/complaints", roles=("Admin", "Secretary"))
     return public(row)
 
 

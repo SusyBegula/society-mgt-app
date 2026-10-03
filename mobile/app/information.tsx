@@ -1,4 +1,5 @@
 import { useLocalSearchParams, router } from "expo-router";
+import { useApi } from "../src/lib/api";
 import { Screen, Header, Card, Txt, Button } from "../src/components/ui";
 const content: Record<string, { title: string; paragraphs: string[] }> = {
   help: {
@@ -30,7 +31,9 @@ const content: Record<string, { title: string; paragraphs: string[] }> = {
 };
 export default function Information() {
   const { type } = useLocalSearchParams<{ type: string }>();
-  const data = content[type] ?? content.help;
+  const society = useApi<{settings:{privacy_policy?:string;terms?:string}}>("/societies/current");
+  const published = type === "privacy" ? society.data?.settings?.privacy_policy : type === "terms" ? society.data?.settings?.terms : undefined;
+  const data = published ? {title: content[type].title, paragraphs: published.split("\n").filter(Boolean)} : content[type] ?? content.help;
   return (
     <Screen>
       <Header title={data.title} />

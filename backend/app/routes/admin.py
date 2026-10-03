@@ -4,9 +4,10 @@ from sqlalchemy import select, func
 from app.models import (
     Notice, Complaint, ComplaintComment, ResidentMembership,
     User, Unit, Building, Visitor, Parcel, MaintenanceBill,
-    BillItem, Payment, now
+    BillItem, Payment, Refund, now
 )
-from app.security import Db, AdminRole
+from app.security import Db, AdminRole, ManagementRole, FinanceRole
+from app.audit import audit
 from app.schemas import (
     AdminNoticeInput, AdminComplaintUpdate, MemberStatusUpdate,
     BulkBillInput, ReminderInput, OfflinePaymentInput
@@ -61,7 +62,7 @@ def society_stats(db: Db, admin: AdminRole):
 
 
 @router.post("/notices", status_code=201)
-def publish_notice(data: AdminNoticeInput, db: Db, admin: AdminRole):
+def publish_notice(data: AdminNoticeInput, db: Db, admin: ManagementRole):
     notice = Notice(
         society_id=admin.society_id,
         title=data.title,
@@ -84,25 +85,27 @@ def publish_notice(data: AdminNoticeInput, db: Db, admin: AdminRole):
     ).all()
 
     for m in members:
-        notify(db, m, f"New Notice: {data.title}", data.content[:150], "Notices", f"/notice/{notice.id}")
+        notify(db, m, f"New Notice: {data.title}", data.content[:150], "Notices", f"/notices/{notice.id}")
 
+    audit(db, admin, "notice.published", notice.id)
     return public(notice)
 
 
 @router.delete("/notices/{notice_id}", status_code=204)
-def delete_notice(notice_id: str, db: Db, admin: AdminRole):
+def delete_notice(notice_id: str, db: Db, admin: ManagementRole):
     notice = db.scalar(
         select(Notice).where(Notice.id == notice_id, Notice.society_id == admin.society_id)
     )
     if not notice:
         raise HTTPException(404, "Notice not found.")
+    audit(db, admin, "notice.deleted", notice.id)
     db.delete(notice)
 
 
 @router.get("/complaints")
 def list_complaints(
     db: Db,
-    admin: AdminRole,
+    admin: ManagementRole,
     status: str | None = None,
     category: str | None = None,
     offset: int = Query(0, ge=0),
@@ -146,7 +149,7 @@ def list_complaints(
 
 
 @router.patch("/complaints/{complaint_id}")
-def update_complaint(complaint_id: str, data: AdminComplaintUpdate, db: Db, admin: AdminRole):
+def update_complaint(complaint_id: str, data: AdminComplaintUpdate, db: Db, admin: ManagementRole):
     complaint = db.scalar(
         select(Complaint).where(
             Complaint.id == complaint_id,
@@ -186,16 +189,17 @@ def update_complaint(complaint_id: str, data: AdminComplaintUpdate, db: Db, admi
             f"Complaint Update: {complaint.title}",
             f"Status is now '{complaint.status}'. {data.comment or ''}",
             "Complaints",
-            f"/complaint/{complaint.id}"
+            f"/complaints/{complaint.id}"
         )
 
+    audit(db, admin, "complaint.updated", complaint.id, changes=data.model_dump(exclude_none=True))
     return public(complaint)
 
 
 @router.get("/members")
 def list_members(
     db: Db,
-    admin: AdminRole,
+    admin: ManagementRole,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100)
 ):
@@ -229,7 +233,7 @@ def list_members(
 
 
 @router.patch("/members/{member_id}/status")
-def toggle_member_status(member_id: str, data: MemberStatusUpdate, db: Db, admin: AdminRole):
+def toggle_member_status(member_id: str, data: MemberStatusUpdate, db: Db, admin: ManagementRole):
     member = db.scalar(
         select(ResidentMembership).where(
             ResidentMembership.id == member_id,
@@ -240,12 +244,14 @@ def toggle_member_status(member_id: str, data: MemberStatusUpdate, db: Db, admin
         raise HTTPException(404, "Member record not found.")
 
     member.active = data.active
+    member.moved_out_at = None if data.active else now()
+    audit(db, admin, "member.access_changed", member.id, active=data.active)
     db.flush()
     return {"id": member.id, "active": member.active}
 
 
 @router.get("/finance/summary")
-def finance_summary(db: Db, admin: AdminRole):
+def finance_summary(db: Db, admin: FinanceRole):
     total_billed = db.scalar(
         select(func.coalesce(func.sum(MaintenanceBill.amount), 0)).where(
             MaintenanceBill.society_id == admin.society_id
@@ -255,10 +261,13 @@ def finance_summary(db: Db, admin: AdminRole):
     total_collected = db.scalar(
         select(func.coalesce(func.sum(Payment.amount), 0)).where(
             Payment.society_id == admin.society_id,
-            Payment.status == "Paid"
+            Payment.status.in_(["Paid", "Review Required"])
         )
     ) or 0
 
+    refunded = db.scalar(select(func.coalesce(func.sum(Refund.amount), 0)).where(
+        Refund.society_id == admin.society_id, Refund.status == "Completed")) or 0
+    total_collected -= refunded
     total_outstanding = db.scalar(
         select(func.coalesce(func.sum(MaintenanceBill.outstanding), 0)).where(
             MaintenanceBill.society_id == admin.society_id
@@ -282,7 +291,7 @@ def finance_summary(db: Db, admin: AdminRole):
 
 
 @router.get("/finance/defaulters")
-def list_defaulters(db: Db, admin: AdminRole):
+def list_defaulters(db: Db, admin: FinanceRole):
     query = (
         select(MaintenanceBill, Unit, Building)
         .join(Unit, Unit.id == MaintenanceBill.unit_id)
@@ -333,7 +342,7 @@ def list_defaulters(db: Db, admin: AdminRole):
 
 
 @router.post("/finance/reminder")
-def send_reminder(data: ReminderInput, db: Db, admin: AdminRole):
+def send_reminder(data: ReminderInput, db: Db, admin: FinanceRole):
     unit = db.get(Unit, data.unit_id)
     if not unit or unit.society_id != admin.society_id:
         raise HTTPException(404, "Unit not found.")
@@ -370,7 +379,10 @@ def send_reminder(data: ReminderInput, db: Db, admin: AdminRole):
 
 
 @router.post("/finance/bills/bulk", status_code=201)
-def generate_bulk_bills(data: BulkBillInput, db: Db, admin: AdminRole):
+def generate_bulk_bills(data: BulkBillInput, db: Db, admin: FinanceRole):
+    from app.models import Society
+    from app.billing_periods import period_key
+    db.scalar(select(Society).where(Society.id == admin.society_id).with_for_update())
     units = db.scalars(
         select(Unit).where(Unit.society_id == admin.society_id)
     ).all()
@@ -378,16 +390,15 @@ def generate_bulk_bills(data: BulkBillInput, db: Db, admin: AdminRole):
         raise HTTPException(400, "No units registered in this society.")
 
     total_amount = sum(item.amount for item in data.items)
+    if total_amount > 2_000_000_000:
+        raise HTTPException(422, "The total exceeds the supported bill amount.")
+    normalized_period = period_key(data.period)
+    existing_periods = {(unit_id, period_key(period)) for unit_id, period in db.execute(
+        select(MaintenanceBill.unit_id, MaintenanceBill.period).where(MaintenanceBill.society_id == admin.society_id))}
     generated_count = 0
 
     for unit in units:
-        existing = db.scalar(
-            select(MaintenanceBill).where(
-                MaintenanceBill.unit_id == unit.id,
-                MaintenanceBill.period == data.period
-            )
-        )
-        if existing:
+        if (unit.id, normalized_period) in existing_periods:
             continue
 
         bill = MaintenanceBill(
@@ -397,7 +408,8 @@ def generate_bulk_bills(data: BulkBillInput, db: Db, admin: AdminRole):
             due_date=data.due_date,
             amount=total_amount,
             outstanding=total_amount,
-            status="Pending"
+            status="Pending",
+            billing_key=f"{unit.id}:{normalized_period}"
         )
         db.add(bill)
         db.flush()
@@ -422,6 +434,7 @@ def generate_bulk_bills(data: BulkBillInput, db: Db, admin: AdminRole):
                 f"/bills/{bill.id}"
             )
 
+    audit(db, admin, "billing.generated", admin.society_id, count=generated_count, period=data.period)
     return {
         "generated_count": generated_count,
         "period": data.period,
@@ -430,7 +443,7 @@ def generate_bulk_bills(data: BulkBillInput, db: Db, admin: AdminRole):
 
 
 @router.post("/finance/payments/record-offline", status_code=201)
-def record_offline_payment(data: OfflinePaymentInput, db: Db, admin: AdminRole):
+def record_offline_payment(data: OfflinePaymentInput, db: Db, admin: FinanceRole):
     bill = db.scalar(
         select(MaintenanceBill).where(
             MaintenanceBill.id == data.bill_id,
@@ -451,17 +464,19 @@ def record_offline_payment(data: OfflinePaymentInput, db: Db, admin: AdminRole):
         user_id=admin.user_id,
         bill_id=bill.id,
         amount=data.amount,
-        status="Paid",
+        status="Awaiting Clearance" if data.method == "Cheque" else "Paid",
+        payer_name=data.payer_name,
         method=data.method,
         provider="offline",
         reference=ref,
-        paid_at=now()
+        paid_at=None if data.method == "Cheque" else now()
     )
     db.add(payment)
-    bill.outstanding -= data.amount
+    if data.method != "Cheque":
+        bill.outstanding -= data.amount
     if bill.outstanding == 0:
         bill.status = "Paid"
-    elif bill.status != "Partially Paid":
+    elif data.method != "Cheque" and bill.status != "Partially Paid":
         bill.status = "Partially Paid"
     db.flush()
 
@@ -480,5 +495,5 @@ def record_offline_payment(data: OfflinePaymentInput, db: Db, admin: AdminRole):
             f"/bills/{bill.id}"
         )
 
+    audit(db, admin, "payment.recorded", payment.id, amount=data.amount, method=data.method)
     return public(payment)
-

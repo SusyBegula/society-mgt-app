@@ -9,7 +9,7 @@ from app.models import MaintenanceBill, BillItem, Payment, now
 from app.security import Db, Property, owned, scoped
 from app.schemas import OrderInput, PaymentVerification
 from app.serialization import public, page
-from app.payments import gateway, settle, verify_capture, receipt_data, receipt_pdf
+from app.payments import gateway, merchant, settle, verify_capture, receipt_data, receipt_pdf
 from app.notifications import notify
 
 router = APIRouter(tags=["Bills & payments"])
@@ -60,9 +60,9 @@ def order(data: OrderInput, db: Db, member: Property):
         if cfg.payment_provider == "development":
             payment.order_id = "dev_" + secrets.token_hex(12)
         else:
-            remote = gateway("POST", "orders", json={"amount": payment.amount, "currency": "INR", "receipt": payment.id})
+            remote = gateway(member.society_id, "POST", "orders", json={"amount": payment.amount, "currency": "INR", "receipt": payment.id})
             payment.order_id = remote["id"]
-    return {**public(payment), "key_id": cfg.razorpay_key_id, "currency": "INR"}
+    return {**public(payment), "key_id": merchant(member.society_id)["key_id"] if payment.provider == "razorpay" else "", "currency": "INR"}
 
 
 @router.post("/payments/verify")
@@ -70,7 +70,7 @@ def verify(data: PaymentVerification, db: Db, member: Property):
     payment = owned(db, Payment, data.payment_id, member, lock=True)
     if payment.provider != "razorpay":
         raise HTTPException(400, "Invalid payment provider.")
-    expected = hmac.new(settings().razorpay_key_secret.encode(), f"{payment.order_id}|{data.razorpay_payment_id}".encode(), hashlib.sha256).hexdigest()
+    expected = hmac.new(merchant(member.society_id)["key_secret"].encode(), f"{payment.order_id}|{data.razorpay_payment_id}".encode(), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, data.razorpay_signature):
         raise HTTPException(400, "Payment verification failed. Please contact support if money was debited.")
     verify_capture(db, payment, data.razorpay_payment_id)
@@ -86,10 +86,7 @@ def simulate(record_id: str, db: Db, member: Property):
     payment = owned(db, Payment, record_id, member, lock=True)
     if payment.provider != "development":
         raise HTTPException(400, "Invalid payment provider.")
-    was_paid = payment.status == "Paid"
     settle(db, payment, "DEV" + secrets.token_hex(10), "Development / UPI")
-    if not was_paid:
-        notify(db, member, "Payment successful", f"INR {payment.amount / 100:,.0f} maintenance payment received.", "Payments", f"/receipt/{payment.id}")
     return public(payment)
 
 
@@ -97,7 +94,7 @@ def simulate(record_id: str, db: Db, member: Property):
 def reconcile(record_id: str, db: Db, member: Property):
     payment = owned(db, Payment, record_id, member, lock=True)
     if payment.provider == "razorpay" and payment.status != "Paid":
-        remote = gateway("GET", f"orders/{payment.order_id}/payments")
+        remote = gateway(member.society_id, "GET", f"orders/{payment.order_id}/payments")
         for item in remote.get("items", []):
             if item.get("status") in ("captured", "authorized"):
                 verify_capture(db, payment, item["id"])
@@ -105,12 +102,11 @@ def reconcile(record_id: str, db: Db, member: Property):
     return public(payment)
 
 
-@router.post("/payments/webhook", status_code=204)
-async def webhook(request: Request, db: Db):
-    if not settings().razorpay_webhook_secret:
-        raise HTTPException(503, "Webhook unavailable")
+@router.post("/payments/webhook/{society_id}", status_code=204)
+async def webhook(society_id: str, request: Request, db: Db):
+    account = merchant(society_id)
     raw = await request.body()
-    expected = hmac.new(settings().razorpay_webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
+    expected = hmac.new(account["webhook_secret"].encode(), raw, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, request.headers.get("X-Razorpay-Signature", "")):
         raise HTTPException(400, "Invalid signature")
     try:
@@ -118,7 +114,7 @@ async def webhook(request: Request, db: Db):
         remote = event["payload"]["payment"]["entity"]
     except (ValueError, KeyError, TypeError):
         raise HTTPException(400, "Invalid event")
-    payment = db.scalar(select(Payment).where(Payment.order_id == remote.get("order_id")).with_for_update())
+    payment = db.scalar(select(Payment).where(Payment.order_id == remote.get("order_id"), Payment.society_id == society_id).with_for_update())
     if payment and payment.provider == "razorpay" and event.get("event") == "payment.captured":
         verify_capture(db, payment, remote["id"])
 

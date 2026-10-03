@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    razorpay_society_id: str = ""
+    razorpay_accounts: dict[str, dict[str, str]] = {}
+    platform_admin_user_ids: list[str] = []
     storage_backend: Literal["local", "s3", "supabase"] = "local"
     storage_path: str = "./uploads"
     s3_bucket: str = ""
@@ -46,8 +49,10 @@ class Settings(BaseSettings):
                 raise ValueError("Production requires Razorpay unless ALLOW_DEMO_PAYMENT=true")
             if not use_demo_auth and not self.sms_url.startswith("https://"):
                 raise ValueError("Production requires HTTPS SMS delivery unless ALLOW_DEMO_AUTH=true")
-            if self.payment_provider == "razorpay" and not all([self.razorpay_key_id, self.razorpay_key_secret, self.razorpay_webhook_secret]):
-                raise ValueError("Production Razorpay credentials are required")
+            # Societies without a configured merchant can use offline collections.
+            for account in self.razorpay_accounts.values():
+                if not all(account.get(k) for k in ("key_id", "key_secret", "webhook_secret")):
+                    raise ValueError("Each Razorpay account needs key_id, key_secret and webhook_secret")
             if not use_demo_auth and not all([self.sms_token, self.sms_url]):
                 raise ValueError("Production SMS credentials are required")
         return self

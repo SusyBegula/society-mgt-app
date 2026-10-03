@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import { View } from "react-native";
 import {
   Screen,
+  Button,
   Header,
   Card,
   Txt,
@@ -22,6 +23,7 @@ const groups: { title: string; items: [IconName, string, string, string][] }[] =
     {
       title: "My household",
       items: [
+        ["cube-outline", "My parcels", "Deliveries and pickup codes", "/parcels"],
         [
           "people-outline",
           "Family members",
@@ -99,6 +101,8 @@ export default function More() {
 
   return (
     <Screen>
+      <Button title="Meetings and polls" secondary onPress={()=>router.push("/community" as never)} />
+      <Button title="Privacy requests" secondary onPress={()=>router.push("/privacy" as never)} />
       <Header
         title="A little more"
         subtitle="Everything else, right here."

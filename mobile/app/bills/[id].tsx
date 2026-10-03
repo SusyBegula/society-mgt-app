@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocalSearchParams, router } from "expo-router";
-import RazorpayCheckout from "react-native-razorpay";
+import RazorpayCheckout from "../../src/lib/checkout";
 import {
   Screen,
   Header,

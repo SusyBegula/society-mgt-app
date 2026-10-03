@@ -123,8 +123,8 @@ class PaymentVerification(Input):
 
 
 class VerifyPassInput(Input):
-    token: str | None = None
-    pin: str | None = None
+    token: str | None = Field(default=None, min_length=1, max_length=1000)
+    pin: str | None = Field(default=None, pattern=r"^\d{6}$")
 
 
 class CheckInInput(Input):
@@ -177,8 +177,8 @@ class BulkBillItem(Input):
 
 class BulkBillInput(Input):
     period: str = Field(min_length=3, max_length=80)
-    due_date: datetime
-    items: list[BulkBillItem] = Field(min_length=1)
+    due_date: AwareDatetime
+    items: list[BulkBillItem] = Field(min_length=1, max_length=50)
 
 
 class ReminderInput(Input):
@@ -186,8 +186,8 @@ class ReminderInput(Input):
 
 
 class OfflinePaymentInput(Input):
+    payer_name: str = Field(default="", max_length=100)
     bill_id: str
     amount: int = Field(gt=0)
     method: Literal["Bank Transfer", "Cheque", "UPI", "Cash"] = "Bank Transfer"
     reference: str = Field(default="", max_length=100)
-

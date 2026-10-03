@@ -1,8 +1,18 @@
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 import { API_URL, request } from "./api";
 import { useSession } from "./session";
+
+export async function uploadDocument(title: string, category: string, ownersOnly: boolean) {
+  const result = await DocumentPicker.getDocumentAsync({type: ["application/pdf", "image/jpeg", "image/png", "image/webp"], copyToCacheDirectory:true});
+  if (result.canceled) return;
+  const asset = result.assets[0];
+  const data = new FormData();
+  data.append("file", {uri:asset.uri,name:asset.name,type:asset.mimeType ?? "application/pdf"} as unknown as Blob);
+  await request(`/admin/resources/documents?title=${encodeURIComponent(title)}&category=${encodeURIComponent(category)}&owners_only=${ownersOnly}`, {method:"POST",body:data});
+}
 
 export async function shareFile(path: string, filename: string) {
   // Refresh the session before downloading with native authenticated networking.
@@ -18,8 +28,8 @@ export async function shareFile(path: string, filename: string) {
   });
   if (await Sharing.isAvailableAsync())
     await Sharing.shareAsync(file.uri, {
-      mimeType: "application/pdf",
-      UTI: "com.adobe.pdf",
+      mimeType: filename.endsWith(".zip") ? "application/zip" : filename.endsWith(".csv") ? "text/csv" : filename.endsWith(".json") ? "application/json" : "application/pdf",
+      UTI: filename.endsWith(".pdf") ? "com.adobe.pdf" : "public.text",
       dialogTitle: "Save or share document",
     });
   else throw new Error("Sharing is unavailable on this device.");

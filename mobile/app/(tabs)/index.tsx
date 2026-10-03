@@ -1,3 +1,4 @@
+import { EnableAlerts } from "../../src/components/office";
 import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import {
@@ -336,6 +337,7 @@ export default function HomeScreen() {
           </Row>
         </>
       )}
+    <EnableAlerts />
     </Screen>
   );
 }

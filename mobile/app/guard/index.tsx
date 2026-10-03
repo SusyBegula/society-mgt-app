@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Pressable, Alert } from "react-native";
+import { View, Pressable, Alert, Linking } from "react-native";
 import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,6 +22,7 @@ import { useSession } from "../../src/lib/session";
 import { time } from "../../src/lib/format";
 import { colors as c } from "../../src/theme";
 import type { ActiveVisitor, ActiveParcel } from "../../src/types/api";
+import { Action, EnableAlerts } from "../../src/components/office";
 
 const guardActions: {
   title: string;
@@ -31,6 +32,8 @@ const guardActions: {
   bg: string;
   color: string;
 }[] = [
+  {title:"Domestic Help",subtitle:"Record attendance and departures",icon:"people-outline",route:"/guard/help",bg:"#E3F2FD",color:"#1565C0"},
+  {title: "Emergency Response", subtitle: "Acknowledge resident alerts", icon: "alert-circle-outline", route: "/guard/emergencies", bg: "#FFEBEE", color: "#C62828"},
   {
     title: "Verify Visitor Pass",
     subtitle: "Scan QR or 6-digit PIN",
@@ -72,6 +75,7 @@ export default function GuardHome() {
 
   const visitorsQuery = useApi<ActiveVisitor[]>("/guard/visitors/active");
   const parcelsQuery = useApi<ActiveParcel[]>("/guard/parcels/active");
+  const queue = useApi<any[]>("/guard/visitors/queue", 5000);
 
   const visitors = visitorsQuery.data || [];
   const parcels = parcelsQuery.data || [];
@@ -140,7 +144,23 @@ export default function GuardHome() {
         </Row>
       </View>
 
+      <EnableAlerts />
       {/* Live Status Cards */}
+      <Section title="Visitor approvals" />
+      <ErrorState error={queue.error} retry={queue.refetch} />
+      <Txt muted>Entry requires resident approval. If the app or network is unavailable, follow the society's manual gate procedure and record the incident with the office.</Txt>
+      {queue.data?.map(v => <Card key={v.id}>
+        <Txt weight="bold">{v.name} · {v.tower} / {v.flat}</Txt><Badge status={v.status} />
+        <Txt>{v.purpose}</Txt>
+        {v.status === "Allowed" && <Action title="Record entry" path={`/guard/visitors/${v.id}/admit`} after={() => void visitorsQuery.refetch()} />}
+        {v.status === "Waiting" && <Button title="Call resident" secondary onPress={() => {
+          void request<{name: string; phone: string}[]>(`/guard/visitors/${v.id}/contacts`).then(contacts => {
+            if (!contacts.length) {Alert.alert("No contact", "Contact the society office."); return;}
+            Alert.alert("Call for visitor approval", "Ask the resident to approve the request in their app.", [
+              ...contacts.slice(0, 2).map(c => ({text: c.name, onPress: () => {void Linking.openURL(`tel:${c.phone}`);}})), {text: "Cancel", style: "cancel" as const}]);
+          }).catch(e => Alert.alert("Could not load contacts", e.message));
+        }} />}
+      </Card>)}
       <Row style={{ gap: 12, marginBottom: 16 }}>
         <Card style={{ flex: 1, backgroundColor: "#E8F5E9", borderColor: "#C8E6C9" }}>
           <Row style={{ justifyContent: "space-between", alignItems: "center" }}>

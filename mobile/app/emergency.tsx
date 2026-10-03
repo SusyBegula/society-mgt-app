@@ -24,6 +24,7 @@ export default function Emergency() {
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const query = useApi<Contact[]>("/directory");
+  const alerts = useApi<any[]>("/emergency",5000);
   const call = useAction(async (number: string) => {
     await Linking.openURL(`tel:${number}`);
   });
@@ -74,6 +75,7 @@ export default function Emergency() {
           <Txt>{message}</Txt>
         </Card>
       )}
+      {alerts.data?.map(a=><Card key={a.id}><Txt weight="bold">{a.kind} · {a.status}</Txt><Txt>{a.response_note || "Awaiting society response. Call for immediate assistance."}</Txt></Card>)}
       <Txt weight="bold" style={{ fontSize: 18 }}>
         Quick calls
       </Txt>

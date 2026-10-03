@@ -19,6 +19,7 @@ import { useSession } from "../src/lib/session";
 import type { Property } from "../src/types/api";
 export default function Properties() {
   const query = useApi<Property[]>("/properties");
+  const platform=useApi<{allowed:boolean}>("/platform/access");
   const client = useQueryClient();
   const mode = useLocalSearchParams<{ switch?: string }>().switch;
   const select = async (property: Property) => {
@@ -69,6 +70,8 @@ export default function Properties() {
           />
         </>
       )}
+      {platform.data?.allowed && <Button title="Manage platform societies" onPress={()=>router.push("/platform" as never)} />}
+      <Button title="Join or create a society" secondary onPress={() => router.push("/onboarding" as never)} />
       <Button
         title="Sign out"
         secondary

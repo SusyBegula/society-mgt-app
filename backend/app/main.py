@@ -7,11 +7,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.db import engine
-from app.routes import auth, residents, billing, visitors, complaints, amenities, community, home, guard, admin
+from app.routes import auth, residents, billing, visitors, complaints, amenities, community, home, guard, admin, setup, emergencies, finance, resources, operations, platform, refunds
 
 app = FastAPI(title="Society Resident API", version="1.0.0", docs_url="/docs" if settings().app_env == "development" else None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=settings().cors_origins, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"], allow_headers=["Authorization", "Content-Type", "X-Property-Id"])
-for module in (auth, residents, billing, visitors, complaints, amenities, community, home, guard, admin):
+for module in (auth, residents, billing, visitors, complaints, amenities, community, home, guard, admin, setup, emergencies, finance, resources, operations, platform, refunds):
     app.include_router(module.router)
 
 

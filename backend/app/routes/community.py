@@ -2,14 +2,23 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, UploadFile, Response
 from sqlalchemy import select, update, or_
-from app.models import Notice, Vehicle, DomesticHelp, DomesticHelpVisit, Document, DirectoryContact, Notification, Device, EmergencyAlert, Upload, now
-from app.security import Db, Property, CurrentUser, scoped, owned, manage_household, limit
+from app.models import Notice, Vehicle, DomesticHelp, DomesticHelpVisit, Document, DirectoryContact, Notification, Device, EmergencyAlert, Upload, Parcel, now
+from app.security import Db, Property, CurrentUser, SocietyContext, scoped, owned, manage_household, limit
 from app.schemas import VehicleInput, DeviceInput, EmergencyInput
 from app.serialization import public, page
 from app.storage import storage, validate_file
-from app.notifications import notify
+from app.notifications import notify, notify_staff
 
 router = APIRouter(tags=["Community"])
+
+
+@router.get("/parcels")
+def parcels(db: Db, member: Property, offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100)):
+    result = page(db, scoped(Parcel, member).order_by(Parcel.created_at.desc()), offset, limit)
+    for row in result["items"]:
+        if row["status"] == "Collected":
+            row.pop("otp", None)
+    return result
 
 
 @router.get("/notices")
@@ -117,17 +126,18 @@ def directory(db: Db, member: Property):
 
 
 @router.get("/notifications")
-def notifications(db: Db, member: Property, offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100)):
+def notifications(db: Db, member: SocietyContext, offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100)):
     return page(db, scoped(Notification, member).where(Notification.user_id == member.user_id).order_by(Notification.created_at.desc()), offset, limit)
 
 
 @router.post("/notifications/read-all", status_code=204)
-def read_all(db: Db, member: Property):
-    db.execute(update(Notification).where(Notification.society_id == member.society_id, Notification.user_id == member.user_id).values(read_at=now()))
+def read_all(db: Db, member: SocietyContext):
+    db.execute(update(Notification).where(Notification.society_id == member.society_id, Notification.user_id == member.user_id,
+        or_(Notification.context_id == member.id, Notification.context_id.is_(None))).values(read_at=now()))
 
 
 @router.post("/notifications/{record_id}/read", status_code=204)
-def mark_read(record_id: str, db: Db, member: Property):
+def mark_read(record_id: str, db: Db, member: SocietyContext):
     row = owned(db, Notification, record_id, member)
     if row.user_id != member.user_id:
         raise HTTPException(404, "Notification unavailable.")
@@ -157,5 +167,6 @@ def emergency(data: EmergencyInput, db: Db, member: Property):
     row = EmergencyAlert(society_id=member.society_id, unit_id=member.unit_id, user_id=member.user_id, kind=data.kind)
     db.add(row)
     db.flush()
+    notify_staff(db, member.society_id, f"{data.kind} emergency", f"An emergency was reported for flat {member.unit_id}. Acknowledge in the response desk.", "Emergency", "/guard/emergencies")
     notify(db, member, f"{data.kind} alert recorded", "Call security or emergency services now for immediate assistance.", "Emergency", "/emergency")
     return {**public(row), "message": "Alert recorded. Call security or emergency services for immediate assistance."}

@@ -59,7 +59,7 @@ export default function ParcelsScreen() {
   const [trackingCode, setTrackingCode] = useState("");
   const [logging, setLogging] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
-  const [loggedParcel, setLoggedParcel] = useState<{ otp: string; flat: string; courier: string } | null>(null);
+  const [loggedParcel, setLoggedParcel] = useState<{ flat: string; courier: string } | null>(null);
 
   const filteredUnits = useMemo(() => {
     if (!unitSearch.trim()) return units.slice(0, 12);
@@ -115,7 +115,7 @@ export default function ParcelsScreen() {
 
     try {
       setLogging(true);
-      const res = await request<any>("/guard/parcels", {
+      await request("/guard/parcels", {
         method: "POST",
         body: JSON.stringify({
           unit_id: selectedUnit.id,
@@ -127,7 +127,6 @@ export default function ParcelsScreen() {
 
       await parcelsQuery.refetch();
       setLoggedParcel({
-        otp: res.otp,
         flat: `${selectedUnit.tower} - ${selectedUnit.flat}`,
         courier: courier.trim(),
       });
@@ -288,27 +287,8 @@ export default function ParcelsScreen() {
               <Txt style={{ color: "#2E7D32", fontSize: 13 }}>
                 {loggedParcel.courier} for {loggedParcel.flat}
               </Txt>
-              <View
-                style={{
-                  backgroundColor: "#fff",
-                  borderRadius: 12,
-                  paddingHorizontal: 20,
-                  paddingVertical: 10,
-                  borderWidth: 1,
-                  borderColor: "#A5D6A7",
-                  alignItems: "center",
-                  marginVertical: 4,
-                }}
-              >
-                <Txt muted style={{ fontSize: 11 }}>
-                  Resident Pickup OTP:
-                </Txt>
-                <Txt weight="extra" style={{ fontSize: 24, letterSpacing: 4, color: "#2E7D32" }}>
-                  {loggedParcel.otp}
-                </Txt>
-              </View>
               <Txt muted style={{ fontSize: 11, textAlign: "center" }}>
-                Push notification with this OTP has been delivered to the flat.
+                Residents can find the pickup code in My parcels. Their notification has been queued.
               </Txt>
               <Row style={{ gap: 10, width: "100%", marginTop: 8 }}>
                 <Button

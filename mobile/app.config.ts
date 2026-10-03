@@ -18,6 +18,8 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    ["expo-camera", {cameraPermission:"Scan a visitor invitation QR code.",recordAudioAndroid:false}],
+    "expo-document-picker",
     "expo-dev-client",
     "expo-secure-store",
     "expo-notifications",

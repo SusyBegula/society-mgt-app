@@ -75,7 +75,7 @@ def properties(db: Db, user: CurrentUser):
 
 @router.get("/societies/current")
 def society(db: Db, member: Property):
-    return public(db.get(Society, member.society_id))
+    return public(db.get(Society, member.society_id), exclude=("join_code",))
 
 
 @router.get("/residents/family")

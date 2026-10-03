@@ -1,5 +1,6 @@
-import { useEffect } from "react";
-import { Stack, router } from "expo-router";
+import { useEffect, useRef } from "react";
+import { Alert, Platform } from "react-native";
+import { Stack } from "expo-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
   useFonts,
@@ -16,6 +17,7 @@ import { useSession } from "../src/lib/session";
 import { Loading, Screen } from "../src/components/ui";
 import { colors } from "../src/theme";
 import "../src/lib/push";
+import { openPushNotification } from "../src/lib/notification-navigation";
 export { ErrorBoundary } from "expo-router";
 
 export default function Layout() {
@@ -27,25 +29,32 @@ export default function Layout() {
     Manrope_800ExtraBold,
   });
   const { hydrated, tokens, hydrate } = useSession();
+  const handledResponse = useRef<string | null>(null);
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
   useEffect(() => {
+    if (!hydrated || !tokens || Platform.OS === "web") return;
+    const handle = async (response: Notifications.NotificationResponse) => {
+      const id = response.notification.request.identifier;
+      if (handledResponse.current === id) return;
+      handledResponse.current = id;
+      try {
+        await openPushNotification(response.notification.request.content.data ?? {});
+        await Notifications.clearLastNotificationResponseAsync();
+      } catch {
+        handledResponse.current = null;
+        Alert.alert("Unable to open alert", "Check your connection and open Notifications in the relevant society.");
+      }
+    };
     const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const route = response.notification.request.content.data?.route;
-        if (
-          typeof route === "string" &&
-          /^\/(visitors|payments|complaints|notices|bookings|emergency|receipt)(\/|$)/.test(
-            route,
-          ) &&
-          useSession.getState().tokens
-        )
-          router.push(route as never);
-      },
+      response => { void handle(response); },
     );
+    void Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) void handle(response);
+    }).catch(() => {});
     return () => subscription.remove();
-  }, []);
+  }, [hydrated, tokens]);
   if ((!loaded && !error) || !hydrated)
     return (
       <Screen>
@@ -70,6 +79,21 @@ export default function Layout() {
         <Stack.Protected guard={!!tokens}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="properties" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="community" />
+          <Stack.Screen name="privacy" />
+          <Stack.Screen name="refunds" />
+          <Stack.Screen name="parcels" />
+          <Stack.Screen name="admin/refunds" />
+          <Stack.Screen name="platform" />
+          <Stack.Screen name="admin/assets" />
+          <Stack.Screen name="admin/privacy" />
+          <Stack.Screen name="admin/setup" />
+          <Stack.Screen name="admin/resources" />
+          <Stack.Screen name="admin/policies" />
+          <Stack.Screen name="guard/help" />
+          <Stack.Screen name="admin/finance-tools" />
+          <Stack.Screen name="guard/emergencies" />
           <Stack.Screen name="bills/[id]" />
           <Stack.Screen name="receipt/[id]" />
           <Stack.Screen name="visitors/invite" />

@@ -5,6 +5,8 @@ from app.models import Visitor, VisitorInvitation, now
 from app.security import Db, Property, owned, scoped
 from app.schemas import VisitorDecision, InvitationInput
 from app.serialization import public, page
+from app.audit import audit
+from app.notifications import notify_staff
 
 router = APIRouter(tags=["Visitors"])
 
@@ -16,10 +18,15 @@ def visitors(db: Db, member: Property, offset: int = Query(0, ge=0), limit: int 
 
 @router.patch("/visitors/{record_id}")
 def decision(record_id: str, data: VisitorDecision, db: Db, member: Property):
+    if not member.receives_visitors:
+        raise HTTPException(403, "Visitor approvals are disabled for this membership.")
     row = owned(db, Visitor, record_id, member, lock=True)
     if row.status != "Waiting":
         raise HTTPException(409, "This visitor request has already been handled.")
     row.status, row.decided_at = data.status, now()
+    audit(db, member, "visitor." + data.status.lower(), row.id)
+    notify_staff(db, member.society_id, "Visitor " + data.status.lower(), row.name,
+                 "Visitors", "/guard", roles=("Guard",))
     return public(row)
 
 

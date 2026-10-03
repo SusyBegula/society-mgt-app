@@ -36,6 +36,8 @@ class Society(Record, Base):
     __tablename__ = "societies"
     name: Mapped[str] = mapped_column(String(120))
     address: Mapped[str] = mapped_column(Text)
+    settings: Mapped[dict] = mapped_column(JSON, default=dict)
+    join_code: Mapped[str | None] = mapped_column(String(32), unique=True)
 
 
 class Building(SocietyRecord, Base):
@@ -48,6 +50,7 @@ class Unit(SocietyRecord, Base):
     __tablename__ = "units"
     building_id: Mapped[str] = mapped_column(ForeignKey("buildings.id"))
     number: Mapped[str] = mapped_column(String(20))
+    area_sqft: Mapped[int] = mapped_column(default=0)
     __table_args__ = (UniqueConstraint("building_id", "number"),)
 
 
@@ -56,6 +59,9 @@ class ResidentMembership(UnitRecord, Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     role: Mapped[str] = mapped_column(String(20))
     active: Mapped[bool] = mapped_column(default=True)
+    receives_visitors: Mapped[bool] = mapped_column(default=True)
+    moved_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    moved_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (UniqueConstraint("user_id", "unit_id"), CheckConstraint("role IN ('Owner', 'Tenant', 'Family Member')"))
 
 
@@ -100,6 +106,7 @@ class MaintenanceBill(UnitRecord, Base):
     amount: Mapped[int]
     outstanding: Mapped[int]
     status: Mapped[str] = mapped_column(String(24), default="Pending")
+    billing_key: Mapped[str | None] = mapped_column(String(150), unique=True)
     __table_args__ = (CheckConstraint("amount > 0 AND outstanding >= 0 AND outstanding <= amount"),)
 
 
@@ -121,6 +128,7 @@ class Payment(UnitRecord, Base):
     order_id: Mapped[str | None] = mapped_column(String(100), unique=True)
     reference: Mapped[str | None] = mapped_column(String(100), unique=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payer_name: Mapped[str] = mapped_column(String(100), default="")
     __table_args__ = (CheckConstraint("amount > 0"),)
 
 
@@ -262,12 +270,14 @@ class DirectoryContact(SocietyRecord, Base):
 
 class Notification(SocietyRecord, Base):
     __tablename__ = "notifications"
+    context_id: Mapped[str | None] = mapped_column(String(36), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(150))
     body: Mapped[str] = mapped_column(String(500))
     category: Mapped[str] = mapped_column(String(30))
     route: Mapped[str] = mapped_column(String(200), default="/")
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    push_state: Mapped[str] = mapped_column(String(20), default="Pending")
 
 
 class Device(Record, Base):
@@ -281,6 +291,11 @@ class EmergencyAlert(UnitRecord, Base):
     __tablename__ = "emergency_alerts"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     kind: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(20), default="Open")
+    acknowledged_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    response_note: Mapped[str] = mapped_column(String(1000), default="")
 
 
 class StaffRole(SocietyRecord, Base):
@@ -304,3 +319,148 @@ class Parcel(UnitRecord, Base):
     collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     __table_args__ = (CheckConstraint("status IN ('Arrived', 'Collected')"),)
 
+
+class AuditEvent(SocietyRecord, Base):
+    __tablename__ = "audit_events"
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(80))
+    resource_id: Mapped[str] = mapped_column(String(36))
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class PushDelivery(Record, Base):
+    __tablename__ = "push_deliveries"
+    notification_id: Mapped[str] = mapped_column(ForeignKey("notifications.id"), index=True)
+    device_id: Mapped[str] = mapped_column(String(36))
+    token: Mapped[str] = mapped_column(String(255))
+    state: Mapped[str] = mapped_column(String(20), default="Pending")
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    ticket_id: Mapped[str | None] = mapped_column(String(100))
+    error: Mapped[str] = mapped_column(String(100), default="")
+    __table_args__ = (UniqueConstraint("notification_id", "device_id"),)
+
+
+class JoinRequest(UnitRecord, Base):
+    __tablename__ = "join_requests"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), default="Pending")
+    note: Mapped[str] = mapped_column(String(500), default="")
+    __table_args__ = (UniqueConstraint("user_id", "unit_id"),)
+
+
+class BillingRule(SocietyRecord, Base):
+    __tablename__ = "billing_rules"
+    label: Mapped[str] = mapped_column(String(100))
+    amount: Mapped[int]
+    basis: Mapped[str] = mapped_column(String(20), default="Flat")
+    unit_id: Mapped[str | None] = mapped_column(ForeignKey("units.id"))
+    active: Mapped[bool] = mapped_column(default=True)
+    __table_args__ = (CheckConstraint("amount > 0"), CheckConstraint("basis IN ('Flat', 'Area')"))
+
+
+class BillAdjustment(UnitRecord, Base):
+    __tablename__ = "bill_adjustments"
+    bill_id: Mapped[str] = mapped_column(ForeignKey("bills.id"))
+    amount: Mapped[int]
+    reason: Mapped[str] = mapped_column(String(500))
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    __table_args__ = (CheckConstraint("amount > 0"),)
+
+
+class Vendor(SocietyRecord, Base):
+    __tablename__ = "vendors"
+    name: Mapped[str] = mapped_column(String(100))
+    phone: Mapped[str] = mapped_column(String(16), default="")
+    category: Mapped[str] = mapped_column(String(80))
+
+
+class Expense(SocietyRecord, Base):
+    __tablename__ = "expenses"
+    vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"))
+    title: Mapped[str] = mapped_column(String(150))
+    amount: Mapped[int]
+    invoice_number: Mapped[str] = mapped_column(String(100))
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(20), default="Submitted")
+    submitted_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reference: Mapped[str] = mapped_column(String(100), default="")
+    __table_args__ = (UniqueConstraint("vendor_id", "invoice_number"), CheckConstraint("amount > 0"))
+
+
+class BankTransaction(SocietyRecord, Base):
+    __tablename__ = "bank_transactions"
+    reference: Mapped[str] = mapped_column(String(100))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    description: Mapped[str] = mapped_column(String(500))
+    amount: Mapped[int]
+    payment_id: Mapped[str | None] = mapped_column(ForeignKey("payments.id"), unique=True)
+    expense_id: Mapped[str | None] = mapped_column(ForeignKey("expenses.id"), unique=True)
+    __table_args__ = (UniqueConstraint("society_id", "reference"), CheckConstraint("amount != 0"))
+
+
+class Asset(SocietyRecord, Base):
+    __tablename__ = "assets"
+    name: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(20))
+    quantity: Mapped[int] = mapped_column(default=1)
+    notes: Mapped[str] = mapped_column(String(2000), default="")
+    next_service_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_service_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Meeting(SocietyRecord, Base):
+    __tablename__ = "meetings"
+    title: Mapped[str] = mapped_column(String(150))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    agenda: Mapped[str] = mapped_column(Text)
+    minutes: Mapped[str] = mapped_column(Text, default="")
+
+
+class Poll(SocietyRecord, Base):
+    __tablename__ = "polls"
+    question: Mapped[str] = mapped_column(String(300))
+    options: Mapped[list] = mapped_column(JSON)
+    closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class PollVote(UnitRecord, Base):
+    __tablename__ = "poll_votes"
+    poll_id: Mapped[str] = mapped_column(ForeignKey("polls.id"))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    option: Mapped[int]
+    __table_args__ = (UniqueConstraint("poll_id", "unit_id"),)
+
+
+class PrivacyRequest(SocietyRecord, Base):
+    __tablename__ = "privacy_requests"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(20))
+    details: Mapped[str] = mapped_column(String(2000))
+    status: Mapped[str] = mapped_column(String(20), default="Open")
+    response: Mapped[str] = mapped_column(String(2000), default="")
+
+
+class PlatformSubscription(SocietyRecord, Base):
+    __tablename__ = "platform_subscriptions"
+    plan: Mapped[str] = mapped_column(String(60), default="Pilot")
+    status: Mapped[str] = mapped_column(String(20), default="Trial")
+    amount: Mapped[int] = mapped_column(default=0)
+    renews_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (UniqueConstraint("society_id"),)
+
+
+class Refund(UnitRecord, Base):
+    __tablename__ = "refunds"
+    payment_id: Mapped[str] = mapped_column(ForeignKey("payments.id"), index=True)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    amount: Mapped[int]
+    reason: Mapped[str] = mapped_column(String(500))
+    status: Mapped[str] = mapped_column(String(20), default="Requested")
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"))
+    reference: Mapped[str | None] = mapped_column(String(100), unique=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (CheckConstraint("amount > 0"),)

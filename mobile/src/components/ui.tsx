@@ -14,6 +14,7 @@ import {
   type ColorValue,
   type StyleProp,
   type TextStyle,
+  type TextProps,
   type ViewStyle,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -40,15 +41,17 @@ export function Txt({
   muted = false,
   weight = "regular",
   numberOfLines,
+  ...props
 }: {
   children: ReactNode;
   style?: StyleProp<TextStyle>;
   muted?: boolean;
   weight?: keyof typeof fonts;
   numberOfLines?: number;
-}) {
+} & Omit<TextProps, "style" | "children">) {
   return (
     <Text
+      {...props}
       numberOfLines={numberOfLines}
       style={[
         {
@@ -566,7 +569,7 @@ export function Confirm({
   );
 }
 const s = StyleSheet.create({
-  screen: { padding: 22, paddingBottom: 40, gap: 18, flexGrow: 1 },
+  screen: { width: "100%", maxWidth: Platform.OS === "web" ? 1100 : undefined, alignSelf: "center", padding: 22, paddingBottom: 40, gap: 18, flexGrow: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",

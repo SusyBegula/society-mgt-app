@@ -18,6 +18,7 @@ import { request, ApiError } from "../../src/lib/api";
 import { date, time } from "../../src/lib/format";
 import { colors as c, fonts } from "../../src/theme";
 import type { VerifiedPass } from "../../src/types/api";
+import { CameraView, useCameraPermissions } from "expo-camera";
 
 export default function VerifyPassScreen() {
   const queryClient = useQueryClient();
@@ -29,21 +30,25 @@ export default function VerifyPassScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pass, setPass] = useState<VerifiedPass | null>(null);
   const [checkInDone, setCheckInDone] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanning, setScanning] = useState(false);
 
-  const handleVerify = async () => {
+  const handleVerify = async (scannedToken?: string) => {
     setErrorMsg(null);
     setPass(null);
     setCheckInDone(false);
 
     const payload: { pin?: string; token?: string } = {};
-    if (isQrMode) {
+    if (scannedToken) {
+      payload.token = scannedToken;
+    } else if (isQrMode) {
       if (!token.trim()) {
         setErrorMsg("Please enter or paste the QR Token.");
         return;
       }
       payload.token = token.trim();
     } else {
-      if (pin.trim().length < 4) {
+      if (!/^\d{6}$/.test(pin.trim())) {
         setErrorMsg("Please enter the 6-digit visitor PIN.");
         return;
       }
@@ -101,6 +106,16 @@ export default function VerifyPassScreen() {
       />
 
       {/* Input Entry Box */}
+      {!checkInDone && <Button title={scanning ? "Close camera" : "Scan visitor QR pass"} secondary onPress={() => {
+        if (scanning) {setScanning(false); return;}
+        if (permission?.granted) setScanning(true);
+        else void requestPermission().then(result => {
+          if (result.granted) setScanning(true);
+          else setErrorMsg("Camera permission is needed to scan. You can still enter the PIN.");
+        });
+      }} />}
+      {scanning && <CameraView style={{height:280,borderRadius:16}} barcodeScannerSettings={{barcodeTypes:["qr"]}}
+        onBarcodeScanned={verifying ? undefined : result => {setScanning(false);void handleVerify(result.data);}} />}
       {!checkInDone && (
         <Card style={{ gap: 14 }}>
           <Row style={{ justifyContent: "space-between", alignItems: "center" }}>

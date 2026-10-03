@@ -1,3 +1,4 @@
+import { EnableAlerts } from "../../src/components/office";
 import { View, Pressable } from "react-native";
 import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,15 @@ const adminCommands: {
   bg: string;
   color: string;
 }[] = [
+  {title:"Refund Review",subtitle:"Approve, process and reconcile refunds",icon:"return-down-back-outline",route:"/admin/refunds",bg:"#E8F5E9",color:"#2E7D32"},
+  {title:"Facilities & Contracts",subtitle:"Assets, inventory and service schedules",icon:"construct-outline",route:"/admin/assets",bg:"#E3F2FD",color:"#1565C0"},
+  {title:"Meetings & Polls",subtitle:"Agendas, minutes and community decisions",icon:"people-outline",route:"/community",bg:"#E3F2FD",color:"#1565C0"},
+  {title:"Privacy & Export",subtitle:"Respond to requests and export society records",icon:"shield-outline",route:"/admin/privacy",bg:"#E3F2FD",color:"#1565C0"},
+  {title:"Society Resources",subtitle:"Amenities, documents, contacts and parking",icon:"folder-open-outline",route:"/admin/resources",bg:"#E3F2FD",color:"#1565C0"},
+  {title:"Policies & Activity",subtitle:"Privacy, service targets and audit history",icon:"document-text-outline",route:"/admin/policies",bg:"#E3F2FD",color:"#1565C0"},
+  {title: "Office Accounts", subtitle: "Billing rules, cheques, expenses and bank matching", icon: "calculator-outline", route: "/admin/finance-tools", bg: "#E8F5E9", color: "#2E7D32"},
+  {title: "Society Setup", subtitle: "Flats, imports, verified residents and staff", icon: "business-outline", route: "/admin/setup", bg: "#E8F5E9", color: "#2E7D32"},
+  {title: "Emergency Response", subtitle: "Acknowledge and resolve resident alerts", icon: "alert-circle-outline", route: "/guard/emergencies", bg: "#FFEBEE", color: "#C62828"},
   {
     title: "Broadcast Notice",
     subtitle: "Publish circulars & instant push alerts",
@@ -76,8 +86,9 @@ export default function AdminHub() {
   const property = useSession((s) => s.property);
   const client = useQueryClient();
 
-  const statsQuery = useApi<AdminStats>("/admin/stats");
-  const complaintsQuery = useApi<{ items: AdminComplaint[] }>("/admin/complaints?limit=3");
+  const managesOperations = property?.role === "Admin" || property?.role === "Secretary";
+  const statsQuery = useApi<AdminStats>("/admin/stats", undefined, managesOperations);
+  const complaintsQuery = useApi<{ items: AdminComplaint[] }>("/admin/complaints?limit=3", undefined, managesOperations);
 
   const stats = statsQuery.data;
   const recentComplaints = complaintsQuery.data?.items || [];
@@ -85,7 +96,7 @@ export default function AdminHub() {
   return (
     <Screen
       refresh={() => {
-        void Promise.all([statsQuery.refetch(), complaintsQuery.refetch()]);
+        if (managesOperations) void Promise.all([statsQuery.refetch(), complaintsQuery.refetch()]);
       }}
     >
       {/* Header with Switch Property & Sign Out */}
@@ -121,11 +132,12 @@ export default function AdminHub() {
         </Row>
       </View>
 
+      <EnableAlerts />
       {/* KPI Stats Cards */}
       {statsQuery.isLoading && <Loading />}
       <ErrorState error={statsQuery.error} retry={statsQuery.refetch} />
 
-      {stats && (
+      {managesOperations && stats && (
         <View style={{ gap: 10, marginBottom: 8 }}>
           <Row style={{ gap: 10 }}>
             {/* Open Complaints */}
@@ -219,7 +231,7 @@ export default function AdminHub() {
       {/* Main Admin Actions */}
       <Section title="Committee Operations" />
       <View style={{ gap: 10 }}>
-        {adminCommands.map((cmd) => (
+        {adminCommands.filter(cmd => property?.role === "Admin" || (property?.role === "Treasurer" ? (cmd.route.startsWith("/admin/finance") || cmd.route === "/admin/refunds") : !(cmd.route.startsWith("/admin/finance") || cmd.route === "/admin/refunds"))).map((cmd) => (
           <Card
             key={cmd.title}
             onPress={() => router.push(cmd.route as never)}
@@ -259,6 +271,7 @@ export default function AdminHub() {
       </View>
 
       {/* Recent Complaints Section */}
+      {managesOperations && <>
       <Section
         title="Recent Society Complaints"
         action="View All"
@@ -266,8 +279,9 @@ export default function AdminHub() {
       />
 
       {complaintsQuery.isLoading && <Loading />}
+      <ErrorState error={complaintsQuery.error} retry={complaintsQuery.refetch} />
 
-      {recentComplaints.length === 0 && !complaintsQuery.isLoading && (
+      {recentComplaints.length === 0 && !complaintsQuery.isLoading && !complaintsQuery.error && (
         <Empty
           icon="checkmark-circle-outline"
           title="No Issues Reported"
@@ -310,6 +324,7 @@ export default function AdminHub() {
           </Row>
         </Card>
       ))}
+      </>}
     </Screen>
   );
 }
