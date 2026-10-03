@@ -32,7 +32,8 @@ jobs:
       - name: Execute Maintenance Worker
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          APP_ENV: production
+          APP_ENV: staging
+          JWT_SECRET: "ci-maintenance-worker-secret-must-be-32-chars-minimum"
         run: |
           cd backend
           python -c "from app.maintenance_worker import tick; tick()"
