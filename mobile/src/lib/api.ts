@@ -9,11 +9,14 @@ import {
 } from "@tanstack/react-query";
 import type { Page } from "../types/api";
 
-export const API_URL = (
+export const PRIMARY_API_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
   Constants.expoConfig?.extra?.apiUrl ||
   "https://api.susybegula.co.in"
 ).replace(/\/$/, "");
+export const FALLBACK_API_URL = "https://society-mgt-app-376i.onrender.com";
+let activeApiUrl = PRIMARY_API_URL;
+export const API_URL = activeApiUrl;
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -78,11 +81,25 @@ export async function request<T>(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
-    const response = await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers,
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${activeApiUrl}${path}`, {
+        ...options,
+        headers,
+        signal: controller.signal,
+      });
+    } catch (networkErr: any) {
+      if (activeApiUrl !== FALLBACK_API_URL) {
+        activeApiUrl = FALLBACK_API_URL;
+        response = await fetch(`${activeApiUrl}${path}`, {
+          ...options,
+          headers,
+          signal: controller.signal,
+        });
+      } else {
+        throw networkErr;
+      }
+    }
     if (response.status === 401 && authenticated && !retried) {
       if (!refreshing)
         refreshing = refreshSession().finally(() => {
