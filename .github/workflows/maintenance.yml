@@ -1,0 +1,38 @@
+name: Scheduled Society Maintenance
+
+on:
+  schedule:
+    # Runs at the start of every hour (00:00, 01:00, 02:00, ...)
+    - cron: '0 * * * *'
+  # Allows you to manually trigger it anytime from the GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  run-maintenance:
+    name: Run Hourly Maintenance Tick
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.lock
+          pip install --no-deps -e .
+
+      - name: Execute Maintenance Worker
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          APP_ENV: production
+        run: |
+          cd backend
+          python -c "from app.maintenance_worker import tick; tick()"
