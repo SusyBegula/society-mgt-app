@@ -25,7 +25,13 @@ export default function Properties() {
     await client.cancelQueries();
     client.clear();
     await useSession.getState().setProperty(property);
-    router.replace("/");
+    if (property.role === "Guard") {
+      router.replace("/guard");
+    } else if (property.role === "Secretary" || property.role === "Admin" || property.role === "Treasurer") {
+      router.replace("/admin");
+    } else {
+      router.replace("/");
+    }
   };
   useEffect(() => {
     if (query.data?.length === 1 && !mode) void select(query.data[0]);
@@ -75,15 +81,18 @@ export default function Properties() {
   );
 }
 function ViewText({ property }: { property: Property }) {
+  const subtitle =
+    property.context_type === "staff"
+      ? `${property.tower} · ${property.flat}`
+      : `${property.tower} · Flat ${property.flat}`;
   return (
-    <>
-      <Txt weight="bold" style={{ flex: 1, fontSize: 17 }}>
-        {property.society}
-        {"\n"}
-        <Txt muted style={{ fontSize: 12 }}>
-          {property.tower} · Flat {property.flat}
-        </Txt>
+    <Txt weight="bold" style={{ flex: 1, fontSize: 17 }}>
+      {property.society}
+      {"\n"}
+      <Txt muted style={{ fontSize: 12 }}>
+        {subtitle}
       </Txt>
-    </>
+    </Txt>
   );
 }
+

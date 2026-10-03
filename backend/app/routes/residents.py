@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
-from app.models import User, Society, Building, Unit, ResidentMembership, FamilyMember, Upload
+from app.models import User, Society, Building, Unit, ResidentMembership, FamilyMember, Upload, StaffRole
 from app.security import Db, CurrentUser, Property, scoped, owned, manage_household
 from app.serialization import public
 from app.schemas import ProfileInput, PreferencesInput, FamilyInput
+
 
 router = APIRouter(tags=["Residents & properties"])
 
@@ -37,7 +38,39 @@ def properties(db: Db, user: CurrentUser):
         .join(Society, Society.id == ResidentMembership.society_id)
         .join(Unit, Unit.id == ResidentMembership.unit_id).join(Building, Building.id == Unit.building_id)
         .where(ResidentMembership.user_id == user.id, ResidentMembership.active.is_(True))).all()
-    return [dict(id=m.id, society_id=s.id, society=s.name, address=s.address, tower=b.name, flat=u.number, role=m.role) for m, s, u, b in records]
+    results = [
+        dict(
+            id=m.id,
+            context_type="unit",
+            society_id=s.id,
+            society=s.name,
+            address=s.address,
+            tower=b.name,
+            flat=u.number,
+            role=m.role
+        )
+        for m, s, u, b in records
+    ]
+
+    staff_records = db.execute(
+        select(StaffRole, Society)
+        .join(Society, Society.id == StaffRole.society_id)
+        .where(StaffRole.user_id == user.id, StaffRole.active.is_(True))
+    ).all()
+    for sr, s in staff_records:
+        results.append(dict(
+            id=sr.id,
+            context_type="staff",
+            society_id=s.id,
+            society=s.name,
+            address=s.address,
+            tower="Management" if sr.role != "Guard" else "Security",
+            flat=sr.title or sr.role,
+            role=sr.role
+        ))
+
+    return results
+
 
 
 @router.get("/societies/current")

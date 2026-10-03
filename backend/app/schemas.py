@@ -120,3 +120,74 @@ class PaymentVerification(Input):
     payment_id: str
     razorpay_payment_id: str = Field(max_length=100)
     razorpay_signature: str = Field(max_length=128)
+
+
+class VerifyPassInput(Input):
+    token: str | None = None
+    pin: str | None = None
+
+
+class CheckInInput(Input):
+    invitation_id: str
+
+
+class WalkInVisitorInput(Input):
+    unit_id: str
+    name: Name
+    phone: Phone
+    kind: Literal["Guest", "Delivery", "Cab", "Service"] = "Guest"
+    purpose: str = Field(min_length=1, max_length=120)
+
+
+class ParcelInput(Input):
+    unit_id: str
+    courier: str = Field(min_length=1, max_length=80)
+    recipient_name: str = Field(default="", max_length=120)
+    tracking_code: str = Field(default="", max_length=120)
+
+
+class ParcelCollectInput(Input):
+    otp: str = Field(min_length=4, max_length=6)
+
+
+class AdminNoticeInput(Input):
+    title: str = Field(min_length=3, max_length=150)
+    category: Literal["General", "Maintenance", "Rules", "Events", "Urgent"] = "General"
+    content: str = Field(min_length=10, max_length=2000)
+    priority: Literal["Normal", "Urgent"] = "Normal"
+    attachments: list[str] = []
+
+
+
+class AdminComplaintUpdate(Input):
+    status: Literal["Open", "In Progress", "Resolved", "Closed"] | None = None
+    priority: Literal["Low", "Normal", "High", "Urgent"] | None = None
+    assigned_to: str | None = None
+    comment: str | None = None
+
+
+class MemberStatusUpdate(Input):
+    active: bool
+
+
+class BulkBillItem(Input):
+    label: str = Field(min_length=1, max_length=100)
+    amount: int = Field(gt=0)
+
+
+class BulkBillInput(Input):
+    period: str = Field(min_length=3, max_length=80)
+    due_date: datetime
+    items: list[BulkBillItem] = Field(min_length=1)
+
+
+class ReminderInput(Input):
+    unit_id: str
+
+
+class OfflinePaymentInput(Input):
+    bill_id: str
+    amount: int = Field(gt=0)
+    method: Literal["Bank Transfer", "Cheque", "UPI", "Cash"] = "Bank Transfer"
+    reference: str = Field(default="", max_length=100)
+

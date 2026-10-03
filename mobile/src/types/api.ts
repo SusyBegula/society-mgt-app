@@ -6,13 +6,15 @@ export type Page<T> = {
 };
 export type Property = {
   id: string;
+  context_type?: "unit" | "staff";
   society_id: string;
   society: string;
   tower: string;
   flat: string;
-  role: "Owner" | "Tenant" | "Family Member";
+  role: "Owner" | "Tenant" | "Family Member" | "Admin" | "Secretary" | "Treasurer" | "Guard";
   address: string;
 };
+
 export type Profile = {
   id: string;
   name: string;
@@ -182,3 +184,107 @@ export type Home = {
   booking: Booking | null;
   unread: number;
 };
+
+export type GuardUnit = {
+  id: string;
+  tower: string;
+  flat: string;
+};
+
+export type VerifiedPass = {
+  valid: boolean;
+  invitation_id: string;
+  visitor_name: string;
+  visitor_phone: string;
+  tower: string;
+  flat: string;
+  host_name: string;
+  valid_from: string;
+  valid_until: string;
+  notes: string;
+};
+
+export type ActiveVisitor = {
+  id: string;
+  name: string;
+  phone: string;
+  kind: string;
+  purpose: string;
+  tower: string;
+  flat: string;
+  entry_at: string;
+};
+
+export type ActiveParcel = {
+  id: string;
+  courier: string;
+  recipient_name: string;
+  tracking_code: string;
+  tower: string;
+  flat: string;
+  created_at: string;
+};
+
+export type AdminStats = {
+  open_complaints: number;
+  active_visitors: number;
+  active_parcels: number;
+  total_units: number;
+  total_members: number;
+};
+
+export type AdminComplaint = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  status: string;
+  assigned_to: string | null;
+  tower: string;
+  flat: string;
+  resident_name: string;
+  resident_phone: string;
+  created_at: string;
+};
+
+export type AdminMember = {
+  id: string;
+  user_id: string;
+  name: string;
+  phone: string;
+  role: string;
+  tower: string;
+  flat: string;
+  active: boolean;
+  created_at: string;
+};
+
+export type FinanceSummary = {
+  total_billed: number;
+  total_collected: number;
+  total_outstanding: number;
+  defaulters_count: number;
+};
+
+export type DefaulterBill = {
+  id: string;
+  period: string;
+  amount: number;
+  outstanding: number;
+  due_date: string;
+  is_overdue: boolean;
+};
+
+export type DefaulterUnit = {
+  unit_id: string;
+  tower: string;
+  flat: string;
+  resident_name: string;
+  resident_phone: string;
+  total_outstanding: number;
+  oldest_due_date: string;
+  bills_count: number;
+  bills: DefaulterBill[];
+};
+

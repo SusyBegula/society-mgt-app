@@ -8,6 +8,7 @@ import {
   Row,
   Avatar,
   Badge,
+  Icon,
   ListItem,
   Divider,
   Section,
@@ -15,7 +16,7 @@ import {
 } from "../../src/components/ui";
 import { useApi } from "../../src/lib/api";
 import { useSession } from "../../src/lib/session";
-import type { Profile } from "../../src/types/api";
+import type { Profile, Property } from "../../src/types/api";
 const groups: { title: string; items: [IconName, string, string, string][] }[] =
   [
     {
@@ -93,6 +94,9 @@ const groups: { title: string; items: [IconName, string, string, string][] }[] =
 export default function More() {
   const profile = useApi<Profile>("/residents/me");
   const property = useSession((s) => s.property)!;
+  const propertiesQuery = useApi<Property[]>("/properties");
+  const staffRole = propertiesQuery.data?.find((p) => p.context_type === "staff");
+
   return (
     <Screen>
       <Header
@@ -114,6 +118,47 @@ export default function More() {
           <Badge status={property.role} />
         </Row>
       </Card>
+
+      {staffRole && (
+        <Card
+          style={{ backgroundColor: "#F1F8E9", borderColor: "#C8E6C9" }}
+          onPress={async () => {
+            await useSession.getState().setProperty(staffRole);
+            if (staffRole.role === "Guard") {
+              router.push("/guard" as never);
+            } else {
+              router.push("/admin" as never);
+            }
+          }}
+        >
+          <Row style={{ alignItems: "center" }}>
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                backgroundColor: "#E8F5E9",
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: 12,
+              }}
+            >
+              <Icon name="briefcase-outline" color="#2E7D32" size={22} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Txt weight="bold" style={{ fontSize: 15, color: "#1B5E20" }}>
+                {staffRole.role === "Guard"
+                  ? "Security Guard Desk"
+                  : "Management Committee Desk"}
+              </Txt>
+              <Txt muted style={{ fontSize: 12 }}>
+                Switch to {staffRole.society} ({staffRole.role})
+              </Txt>
+            </View>
+            <Badge status={staffRole.role} />
+          </Row>
+        </Card>
+      )}
       {groups.map((group) => (
         <View key={group.title} style={{ gap: 13 }}>
           <Section title={group.title} />

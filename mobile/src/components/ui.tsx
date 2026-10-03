@@ -248,10 +248,11 @@ export function Row({
 }
 export function Badge({ status }: { status: string }) {
   const good =
-    /Paid|Allowed|Confirmed|Active|Resolved|Closed|Inside|Owner|Success/.test(
+    /Paid|Allowed|Confirmed|Active|Resolved|Closed|Inside|Owner|Success|Secretary|Admin/.test(
       status,
     ) && !/Partially/.test(status);
   const bad = /Denied|Cancelled|Overdue|Urgent|Failed|Expired/.test(status);
+  const info = /Guard|Staff|Tenant/.test(status);
   return (
     <View
       style={{
@@ -259,7 +260,7 @@ export function Badge({ status }: { status: string }) {
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 7,
-        backgroundColor: good ? c.pale : bad ? c.redBg : c.amberBg,
+        backgroundColor: good ? c.pale : bad ? c.redBg : info ? "#EAF2F8" : c.amberBg,
       }}
     >
       <Txt
@@ -267,7 +268,7 @@ export function Badge({ status }: { status: string }) {
         style={{
           fontSize: 10,
           lineHeight: 16,
-          color: good ? c.primary : bad ? c.red : c.amber,
+          color: good ? c.primary : bad ? c.red : info ? "#2980B9" : c.amber,
         }}
       >
         {status}
@@ -275,6 +276,7 @@ export function Badge({ status }: { status: string }) {
     </View>
   );
 }
+
 export function Avatar({ name, size = 46 }: { name: string; size?: number }) {
   return (
     <View

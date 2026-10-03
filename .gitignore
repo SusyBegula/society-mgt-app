@@ -12,3 +12,6 @@ backend/uploads/
 *.aab
 .DS_Store
 *.egg-info/
+.vscode
+scratch/
+backend/scratch/

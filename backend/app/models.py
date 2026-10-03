@@ -281,3 +281,26 @@ class EmergencyAlert(UnitRecord, Base):
     __tablename__ = "emergency_alerts"
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
     kind: Mapped[str] = mapped_column(String(30))
+
+
+class StaffRole(SocietyRecord, Base):
+    __tablename__ = "staff_roles"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(80), default="")
+    active: Mapped[bool] = mapped_column(default=True)
+    __table_args__ = (UniqueConstraint("user_id", "society_id", "role"), CheckConstraint("role IN ('Admin', 'Secretary', 'Treasurer', 'Guard')"))
+
+
+class Parcel(UnitRecord, Base):
+    __tablename__ = "parcels"
+    courier: Mapped[str] = mapped_column(String(80))
+    recipient_name: Mapped[str] = mapped_column(String(120), default="")
+    tracking_code: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(20), default="Arrived")
+    otp: Mapped[str] = mapped_column(String(6))
+    photo_id: Mapped[str | None] = mapped_column(String(36), default=None)
+    logged_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    collected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    __table_args__ = (CheckConstraint("status IN ('Arrived', 'Collected')"),)
+

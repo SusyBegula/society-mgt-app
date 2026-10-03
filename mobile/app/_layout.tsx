@@ -92,6 +92,15 @@ export default function Layout() {
           <Stack.Screen name="profile" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="information" />
+          <Stack.Screen name="guard/index" />
+          <Stack.Screen name="guard/verify" />
+          <Stack.Screen name="guard/walk-in" />
+          <Stack.Screen name="guard/parcels" />
+          <Stack.Screen name="admin/index" />
+          <Stack.Screen name="admin/notices" />
+          <Stack.Screen name="admin/complaints" />
+          <Stack.Screen name="admin/members" />
+          <Stack.Screen name="admin/finance" />
         </Stack.Protected>
       </Stack>
     </QueryClientProvider>

@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
-from app.models import User, ResidentMembership, RefreshToken, RateLimit, now
+from app.models import User, ResidentMembership, StaffRole, RefreshToken, RateLimit, now
 
 Db = Annotated[Session, Depends(get_db)]
 bearer = HTTPBearer(auto_error=False)
@@ -52,12 +52,56 @@ CurrentUser = Annotated[User, Depends(current_user)]
 def membership(db: Db, user: CurrentUser, x_property_id: Annotated[str, Header()]):
     member = db.scalar(select(ResidentMembership).where(ResidentMembership.id == x_property_id,
                        ResidentMembership.user_id == user.id, ResidentMembership.active.is_(True)))
-    if not member:
-        raise HTTPException(403, "You do not have access to this property.")
-    return member
+    if member:
+        return member
+    staff = db.scalar(select(StaffRole).where(StaffRole.id == x_property_id,
+                      StaffRole.user_id == user.id, StaffRole.active.is_(True)))
+    if staff:
+        res_mem = db.scalar(select(ResidentMembership).where(ResidentMembership.society_id == staff.society_id,
+                            ResidentMembership.user_id == user.id, ResidentMembership.active.is_(True)))
+        if res_mem:
+            return res_mem
+    raise HTTPException(403, "You do not have access to this property.")
 
 
 Property = Annotated[ResidentMembership, Depends(membership)]
+
+
+def staff_context(db: Db, user: CurrentUser, x_property_id: Annotated[str, Header()]) -> StaffRole:
+    staff = db.scalar(select(StaffRole).where(StaffRole.id == x_property_id,
+                      StaffRole.user_id == user.id, StaffRole.active.is_(True)))
+    if staff:
+        return staff
+    res_mem = db.scalar(select(ResidentMembership).where(ResidentMembership.id == x_property_id,
+                        ResidentMembership.user_id == user.id, ResidentMembership.active.is_(True)))
+    if res_mem:
+        staff = db.scalar(select(StaffRole).where(StaffRole.society_id == res_mem.society_id,
+                          StaffRole.user_id == user.id, StaffRole.active.is_(True)))
+        if staff:
+            return staff
+    raise HTTPException(403, "You do not have administrative or staff privileges for this society.")
+
+
+Staff = Annotated[StaffRole, Depends(staff_context)]
+
+
+def require_admin(staff: Staff) -> StaffRole:
+    if staff.role not in ("Admin", "Secretary", "Treasurer"):
+        raise HTTPException(403, "Only society administrators or committee members can perform this action.")
+    return staff
+
+
+AdminRole = Annotated[StaffRole, Depends(require_admin)]
+
+
+def require_guard(staff: Staff) -> StaffRole:
+    if staff.role not in ("Guard", "Admin", "Secretary"):
+        raise HTTPException(403, "Only security personnel or administrators can perform this action.")
+    return staff
+
+
+GuardRole = Annotated[StaffRole, Depends(require_guard)]
+
 
 
 def scoped(model, member):

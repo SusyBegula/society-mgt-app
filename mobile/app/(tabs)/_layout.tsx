@@ -9,6 +9,10 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const property = useSession((s) => s.property);
   if (!property) return <Redirect href="/properties" />;
+  if (property.role === "Guard") return <Redirect href="/guard" />;
+  if (property.role === "Secretary" || property.role === "Admin" || property.role === "Treasurer") {
+    return <Redirect href="/admin" />;
+  }
   const tabs: {
     name: string;
     title: string;
